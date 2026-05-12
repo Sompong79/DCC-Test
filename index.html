@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>DCC Test Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0f172a;color:#e2e8f0;font-family:'Segoe UI',sans-serif;min-height:100vh}
+  header{background:linear-gradient(90deg,#0f3460,#1a1a2e);padding:16px 24px;border-bottom:3px solid #c9a84c;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+  header h1{font-size:22px;font-weight:800;color:#c9a84c;letter-spacing:2px}
+  header p{font-size:11px;color:#888;margin-top:2px}
+  .upload-btn{background:#c9a84c;color:#000;padding:9px 18px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;border:none}
+  .container{padding:16px}
+  .slicer{background:#1e293b;border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .slicer span{font-size:11px;color:#c9a84c;font-weight:700;margin-right:4px}
+  .yr-btn{padding:5px 14px;border-radius:20px;border:1px solid #444;background:transparent;color:#888;cursor:pointer;font-size:12px;font-weight:700;transition:all .2s}
+  .yr-btn.active{background:#c9a84c;color:#000;border-color:#c9a84c}
+  .yr-btn.all.active{background:#3b82f6;border-color:#3b82f6;color:#fff}
+  .kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px}
+  .kpi{background:#1e293b;border-radius:8px;padding:14px 16px;border-top:3px solid var(--c)}
+  .kpi .val{font-size:26px;font-weight:800;color:var(--c)}
+  .kpi .lbl{font-size:10px;color:#888;margin-top:4px;letter-spacing:1px;text-transform:uppercase}
+  .charts-row{display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:14px}
+  .charts-row2{display:grid;grid-template-columns:3fr 2fr;gap:10px}
+  .card{background:#1e293b;border-radius:10px;padding:16px}
+  .card h3{font-size:11px;color:#c9a84c;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px}
+  canvas{max-height:220px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{color:#c9a84c;font-weight:700;padding:6px 8px;text-align:center;border-bottom:1px solid #c9a84c}
+  td{padding:5px 8px;text-align:center;border-bottom:1px solid #1e2a3a}
+  tr:nth-child(even){background:#0f1629}
+  .err{color:#f87171;font-size:12px;padding:8px 16px}
+  .gauge-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%}
+  footer{text-align:right;font-size:10px;color:#333;padding:8px 16px}
+  @media(max-width:700px){.charts-row,.charts-row2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>DCC TEST DASHBOARD</h1>
+    <p>Digital Continuity &amp; Compliance Testing Summary</p>
+  </div>
+  <label class="upload-btn">📂 UPLOAD EXCEL
+    <input type="file" accept=".xlsx,.xls" id="fileInput" style="display:none"/>
+  </label>
+</header>
+<div id="err" class="err"></div>
+<div class="container" id="app" style="display:none">
+  <!-- Slicer -->
+  <div class="slicer" id="slicer">
+    <span>📅 YEAR:</span>
+    <button class="yr-btn all active" onclick="selectYear('all')">ALL</button>
+  </div>
+  <!-- KPI -->
+  <div class="kpi-row">
+    <div class="kpi" style="--c:#c9a84c"><div class="val" id="k-total">0</div><div class="lbl">Total Tests</div></div>
+    <div class="kpi" style="--c:#4f86f7"><div class="val" id="k-years">0</div><div class="lbl">Years</div></div>
+    <div class="kpi" style="--c:#4ade80"><div class="val" id="k-pass">-</div><div class="lbl">Pass</div></div>
+    <div class="kpi" style="--c:#f87171"><div class="val" id="k-fail">-</div><div class="lbl">Fail</div></div>
+    <div class="kpi" style="--c:#c9a84c"><div class="val" id="k-rate">-</div><div class="lbl">Pass Rate</div></div>
+  </div>
+  <!-- Row 1 -->
+  <div class="charts-row">
+    <div class="card"><h3>📊 Tests Per Year</h3><canvas id="barChart"></canvas></div>
+    <div class="card gauge-wrap"><h3>🎯 Pass Rate</h3><canvas id="gaugeChart" style="max-height:180px"></canvas><div id="gaugeLabel" style="font-size:22px;font-weight:800;color:#c9a84c;margin-top:-30px"></div><div style="font-size:10px;color:#555;margin-top:8px">Target: 80%</div></div>
+  </div>
+  <!-- Row 2 -->
+  <div class="charts-row2" style="margin-top:10px">
+    <div class="card"><h3>📈 Trend</h3><canvas id="lineChart"></canvas></div>
+    <div class="card"><h3>📋 Summary Table</h3>
+      <table><thead><tr><th>Year</th><th>Total</th><th>Pass</th><th>Fail</th><th>Rate</th></tr></thead>
+      <tbody id="tableBody"></tbody></table>
+    </div>
+  </div>
+</div>
+<footer id="footer"></footer>
+
+<script>
+let allData = [], yearData = [], selectedYears = [], charts = {};
+
+document.getElementById('fileInput').addEventListener('change', function(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    try {
+      const wb = XLSX.read(evt.target.result, {type:'binary', cellDates:true});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      if(!rows.length){ showErr('ไม่พบข้อมูล'); return; }
+      const keys = Object.keys(rows[0]);
+      const dateKey = keys.find(k=>/date|วัน|ทดสอบ|test.*date/i.test(k))||keys[0];
+      const resultKey = keys.find(k=>/pass|fail|result|ผล/i.test(k));
+      const typeKey = keys.find(k=>/type|ประเภท|kind/i.test(k));
+      allData = rows.map(r=>{
+        let yr=null; const v=r[dateKey];
+        if(v instanceof Date) yr=v.getFullYear();
+        else if(typeof v==='string'){const m=v.match(/\d{4}/);if(m)yr=+m[0];}
+        else if(typeof v==='number') yr=new Date((v-25569)*86400000).getFullYear();
+        return {year:yr, result:resultKey?String(r[resultKey]).trim().toUpperCase():null, type:typeKey?String(r[typeKey]).trim():null};
+      }).filter(r=>r.year>2000&&r.year<2100);
+      if(!allData.length){ showErr('ไม่สามารถอ่านวันที่ได้'); return; }
+      buildYearData(); selectedYears=[]; buildSlicer(); render();
+      document.getElementById('app').style.display='block';
+      document.getElementById('footer').textContent='DCC Test Dashboard • '+file.name;
+      showErr('');
+    } catch(ex){ showErr('อ่านไฟล์ไม่ได้: '+ex.message); }
+  };
+  reader.readAsBinaryString(file);
+});
+
+function showErr(msg){ document.getElementById('err').textContent=msg?'⚠️ '+msg:''; }
+
+function buildYearData(){
+  const by={};
+  allData.forEach(({year,result,type})=>{
+    if(!by[year]) by[year]={year,total:0,pass:0,fail:0};
+    by[year].total++;
+    if(result?.includes('P')) by[year].pass++;
+    else if(result?.includes('F')) by[year].fail++;
+  });
+  yearData=Object.values(by).sort((a,b)=>a.year-b.year);
+}
+
+function buildSlicer(){
+  const sl=document.getElementById('slicer');
+  sl.innerHTML='<span>📅 YEAR:</span><button class="yr-btn all active" onclick="selectYear(\'all\')">ALL</button>';
+  yearData.forEach(d=>{
+    const b=document.createElement('button');
+    b.className='yr-btn'; b.textContent=d.year;
+    b.onclick=()=>selectYear(d.year); sl.appendChild(b);
+  });
+}
+
+function selectYear(yr){
+  if(yr==='all'){ selectedYears=[]; }
+  else {
+    const i=selectedYears.indexOf(yr);
+    if(i>=0) selectedYears.splice(i,1); else selectedYears.push(yr);
+  }
+  document.querySelectorAll('.yr-btn').forEach(b=>{
+    if(b.classList.contains('all')) b.classList.toggle('active',selectedYears.length===0);
+    else b.classList.toggle('active',selectedYears.includes(+b.textContent));
+  });
+  render();
+}
+
+function render(){
+  const active=selectedYears.length?selectedYears:yearData.map(d=>d.year);
+  const filtered=yearData.filter(d=>active.includes(d.year));
+  const total=filtered.reduce((s,r)=>s+r.total,0);
+  const pass=filtered.reduce((s,r)=>s+r.pass,0);
+  const fail=filtered.reduce((s,r)=>s+r.fail,0);
+  const rate=total>0?pass/total:0;
+  const hasResult=(pass+fail)>0;
+
+  document.getElementById('k-total').textContent=total;
+  document.getElementById('k-years').textContent=active.length+' ปี';
+  document.getElementById('k-pass').textContent=hasResult?pass:'-';
+  document.getElementById('k-fail').textContent=hasResult?fail:'-';
+  document.getElementById('k-rate').textContent=hasResult?(rate*100).toFixed(1)+'%':'-';
+
+  const labels=filtered.map(d=>d.year);
+
+  // Bar
+  destroyChart('barChart');
+  const bCtx=document.getElementById('barChart').getContext('2d');
+  charts.bar=new Chart(bCtx,{type:'bar',data:{labels,datasets:hasResult?[
+    {label:'Pass',data:filtered.map(d=>d.pass),backgroundColor:'#4ade80',borderRadius:4},
+    {label:'Fail',data:filtered.map(d=>d.fail),backgroundColor:'#f87171',borderRadius:4}
+  ]:[{label:'จำนวนครั้ง',data:filtered.map(d=>d.total),backgroundColor:'#c9a84c',borderRadius:4}]},
+  options:{responsive:true,plugins:{legend:{labels:{color:'#aaa',font:{size:11}}}},scales:{x:{stacked:hasResult,ticks:{color:'#aaa'},grid:{color:'#2a2a4a'}},y:{stacked:hasResult,ticks:{color:'#aaa'},grid:{color:'#2a2a4a'}}}}});
+
+  // Gauge (doughnut)
+  destroyChart('gaugeChart');
+  const gCtx=document.getElementById('gaugeChart').getContext('2d');
+  const gVal=hasResult?rate:0;
+  const gColor=gVal>=0.8?'#4ade80':gVal>=0.6?'#c9a84c':'#f87171';
+  charts.gauge=new Chart(gCtx,{type:'doughnut',data:{datasets:[{data:[gVal,1-gVal],backgroundColor:[gColor,'#2a2a4a'],borderWidth:0,circumference:270,rotation:225}]},
+  options:{responsive:true,cutout:'75%',plugins:{legend:{display:false},tooltip:{enabled:false}}}});
+  document.getElementById('gaugeLabel').textContent=hasResult?(rate*100).toFixed(1)+'%':'N/A';
+
+  // Line
+  destroyChart('lineChart');
+  const lCtx=document.getElementById('lineChart').getContext('2d');
+  const lDs=[{label:'Total',data:filtered.map(d=>d.total),borderColor:'#c9a84c',backgroundColor:'rgba(201,168,76,0.1)',tension:.3,pointRadius:4}];
+  if(hasResult){
+    lDs.push({label:'Pass',data:filtered.map(d=>d.pass),borderColor:'#4ade80',backgroundColor:'rgba(74,222,128,0.05)',tension:.3,pointRadius:3});
+    lDs.push({label:'Fail',data:filtered.map(d=>d.fail),borderColor:'#f87171',backgroundColor:'rgba(248,113,113,0.05)',tension:.3,pointRadius:3});
+  }
+  charts.line=new Chart(lCtx,{type:'line',data:{labels,datasets:lDs},
+  options:{responsive:true,plugins:{legend:{labels:{color:'#aaa',font:{size:11}}}},scales:{x:{ticks:{color:'#aaa'},grid:{color:'#2a2a4a'}},y:{ticks:{color:'#aaa'},grid:{color:'#2a2a4a'}}}}});
+
+  // Table
+  const tb=document.getElementById('tableBody'); tb.innerHTML='';
+  filtered.forEach(r=>{
+    const rt=r.total>0?((r.pass/r.total)*100).toFixed(0)+'%':'-';
+    const rtColor=r.total>0&&(r.pass/r.total)>=0.8?'#4ade80':'#c9a84c';
+    tb.innerHTML+=`<tr><td style="color:#c9a84c;font-weight:700">${r.year}</td><td>${r.total}</td><td style="color:#4ade80">${r.pass||'-'}</td><td style="color:#f87171">${r.fail||'-'}</td><td style="color:${rtColor}">${rt}</td></tr>`;
+  });
+}
+
+function destroyChart(id){
+  const c=Chart.getChart(id); if(c) c.destroy();
+}
+</script>
+</body>
+</html>
