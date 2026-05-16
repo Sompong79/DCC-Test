@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLCP DCC Analytics</title>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f4f6f9; --surface: #ffffff; --border: #e0e0e0;
+    --text-primary: #262626; --text-secondary: #8e8e8e;
+    --accent: #0095f6; --accent-light: #e8f4fe;
+    --pass: #2ecc71; --fail: #e74c3c; --dcc: #e74c3c;
+    --u1: #0095f6; --u2: #833ab4;
+    --radius: 12px; --shadow: 0 1px 4px rgba(0,0,0,0.08); --sidebar-w: 220px;
+  }
+  body { font-family: 'Kanit', sans-serif; background: var(--bg); color: var(--text-primary); min-height: 100vh; font-weight: 300; display: flex; }
+  .sidebar { width: var(--sidebar-w); min-height: 100vh; background: #1e2433; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; z-index: 200; }
+  .sidebar-brand { padding: 20px 18px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 10px; }
+  .nav-logo { width: 34px; height: 34px; flex-shrink: 0; background: linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 15px; font-weight: 700; }
+  .brand-title { font-size: 14px; font-weight: 600; color: #fff; }
+  .brand-sub { font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 1px; }
+  .sidebar-section-label { font-size: 10px; font-weight: 500; letter-spacing: 1px; color: rgba(255,255,255,0.3); text-transform: uppercase; padding: 18px 18px 8px; }
+  .sidebar-menu { flex: 1; padding: 0 10px; }
+  .menu-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; margin-bottom: 2px; color: rgba(255,255,255,0.55); font-size: 13px; transition: all 0.18s; }
+  .menu-item.active { background: var(--accent); color: #fff; font-weight: 500; }
+  .menu-icon { font-size: 15px; width: 20px; text-align: center; }
+  .sidebar-footer { padding: 14px 18px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 10px; color: rgba(255,255,255,0.25); }
+  .main-wrap { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; }
+  .topnav { position: sticky; top: 0; z-index: 100; background: rgba(255,255,255,0.95); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 0 24px; height: 54px; display: flex; align-items: center; justify-content: space-between; }
+  .topnav-sheet-name { font-size: 15px; font-weight: 600; }
+  .topnav-right { display: flex; align-items: center; gap: 10px; }
+  .topnav-badge { font-size: 11px; background: var(--accent-light); color: var(--accent); padding: 3px 10px; border-radius: 20px; font-weight: 500; }
+  .btn-reload { font-family: 'Kanit', sans-serif; font-size: 12px; border: 1px solid var(--border); border-radius: 8px; padding: 5px 14px; background: var(--surface); color: var(--text-secondary); cursor: pointer; transition: all 0.2s; }
+  .btn-reload:hover { border-color: var(--accent); color: var(--accent); }
+  main { padding: 24px 24px 48px; }
+
+  /* LOADING STATE */
+  .loading-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; gap: 16px; }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  .loading-title { font-size: 15px; font-weight: 500; color: var(--text-primary); }
+  .loading-sub { font-size: 12px; color: var(--text-secondary); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ERROR / LOGIN */
+  .alert-box { border-radius: var(--radius); padding: 20px 24px; margin-bottom: 20px; }
+  .alert-login { background: #e8f4fe; border: 1px solid #b3d9fc; }
+  .alert-error { background: #fdecea; border: 1px solid #f5c6cb; }
+  .alert-title { font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+  .alert-login .alert-title { color: #0066b3; }
+  .alert-error .alert-title { color: #c0392b; }
+  .alert-sub { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+  .btn-login { font-family: 'Kanit', sans-serif; font-size: 13px; border: none; border-radius: 8px; padding: 10px 20px; background: var(--accent); color: white; cursor: pointer; margin-top: 12px; transition: all 0.2s; display: inline-block; text-decoration: none; }
+  .btn-login:hover { background: #0081d6; }
+
+  /* UPLOAD FALLBACK */
+  .upload-area { border: 2px dashed var(--border); border-radius: var(--radius); padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; margin-top: 16px; }
+  .upload-area:hover { border-color: var(--accent); background: var(--accent-light); }
+  .upload-icon { font-size: 28px; margin-bottom: 8px; }
+  .upload-text { font-size: 13px; color: var(--text-secondary); }
+  #file-input { display: none; }
+
+  /* FILTER BAR */
+  .filter-bar { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 20px; box-shadow: var(--shadow); }
+  .filter-label { font-size: 10px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
+  .filter-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .filter-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 110px; }
+  .filter-group label { font-size: 11px; color: var(--text-secondary); }
+  select { font-family: 'Kanit', sans-serif; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; padding: 7px 30px 7px 12px; background: var(--bg); color: var(--text-primary); cursor: pointer; outline: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e8e' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; }
+  select:focus { border-color: var(--accent); }
+  .btn-reset { font-family: 'Kanit', sans-serif; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; padding: 7px 16px; background: var(--surface); color: var(--text-secondary); cursor: pointer; transition: all 0.2s; align-self: flex-end; }
+  .btn-reset:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* KPI */
+  .kpi-grid { display: grid; gap: 12px; margin-bottom: 20px; }
+  .kpi-grid-6 { grid-template-columns: repeat(6,1fr); }
+  .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); }
+  .kpi-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; }
+  .kpi-value { font-size: 22px; font-weight: 600; letter-spacing: -0.5px; }
+  .kpi-sub { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+  .kpi-pass { color: var(--pass); } .kpi-dcc { color: var(--dcc); } .kpi-u1 { color: var(--u1); } .kpi-u2 { color: var(--u2); }
+
+  /* CHARTS */
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
+  .chart-card.full { grid-column: 1/-1; }
+  .chart-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+  .chart-title { font-size: 14px; font-weight: 500; }
+  .chart-subtitle { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+  .chart-legend { display: flex; gap: 12px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-secondary); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .chart-wrap { position: relative; height: 220px; }
+  .chart-wrap-tall { position: relative; height: 260px; }
+
+  /* TABLE */
+  .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .table-header-bar { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th { padding: 10px 14px; text-align: center; font-weight: 500; font-size: 11px; color: var(--text-secondary); background: var(--bg); border-bottom: 1px solid var(--border); white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid #f0f0f0; transition: background 0.15s; }
+  tbody tr:hover { background: var(--bg); }
+  tbody td { padding: 10px 14px; text-align: center; white-space: nowrap; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+  .badge-pass { background: #e8f8f0; color: #27ae60; }
+  .badge-fail { background: #fdecea; color: #e74c3c; }
+  .badge-notest { background: #f5f5f5; color: #8e8e8e; }
+  .val-pass { color: var(--pass); font-weight: 500; }
+  .val-fail { color: var(--fail); font-weight: 500; }
+  .section-label { font-size: 11px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; margin-top: 4px; }
+
+  @media (max-width: 900px) { .kpi-grid-6 { grid-template-columns: repeat(3,1fr); } }
+  @media (max-width: 640px) { .kpi-grid-6 { grid-template-columns: repeat(2,1fr); } .chart-grid { grid-template-columns: 1fr; } .chart-card.full { grid-column: 1; } }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="nav-logo">⚡</div>
+    <div>
+      <div class="brand-title">BLCP Analytics</div>
+      <div class="brand-sub">DCC Dashboard</div>
+    </div>
+  </div>
+  <div class="sidebar-section-label">ชุดข้อมูล</div>
+  <nav class="sidebar-menu">
+    <div class="menu-item active"><span class="menu-icon">📊</span><span>DCC Data</span></div>
+  </nav>
+  <div class="sidebar-footer">BLCP DCC Analytics · Auto-sync OneDrive</div>
+</aside>
+
+<div class="main-wrap">
+  <div class="topnav">
+    <span class="topnav-sheet-name" id="topnav-title">DCC Data</span>
+    <div class="topnav-right">
+      <span class="topnav-badge" id="nav-count">กำลังโหลด...</span>
+      <button class="btn-reload" onclick="loadFromOneDrive()">🔄 โหลดใหม่</button>
+    </div>
+  </div>
+
+  <main id="main-content">
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loading-screen">
+      <div class="spinner"></div>
+      <div class="loading-title">กำลังโหลดข้อมูลจาก OneDrive...</div>
+      <div class="loading-sub">เฉพาะพนักงาน BLCP Power Limited เท่านั้น</div>
+    </div>
+
+    <!-- Error / Login Screen -->
+    <div id="error-screen" style="display:none">
+      <div class="alert-box alert-login" id="login-alert">
+        <div class="alert-title">🔐 กรุณา Login Microsoft 365 ก่อน</div>
+        <div class="alert-sub">
+          ไฟล์นี้เปิดได้เฉพาะพนักงาน BLCP Power Limited<br>
+          กรุณา Login Microsoft Account ของ BLCP ก่อนแล้วโหลดหน้าใหม่
+        </div>
+        <a href="https://login.microsoftonline.com" target="_blank" class="btn-login">🔑 Login Microsoft 365</a>
+      </div>
+
+      <div class="alert-box alert-error" id="error-alert" style="display:none">
+        <div class="alert-title">❌ โหลดข้อมูลไม่สำเร็จ</div>
+        <div class="alert-sub" id="error-msg">เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง</div>
+      </div>
+
+      <!-- Fallback: Manual Upload -->
+      <div style="margin-top:8px">
+        <div class="alert-sub" style="margin-bottom:8px">หรืออัปโหลดไฟล์ Excel โดยตรง:</div>
+        <div class="upload-area" onclick="document.getElementById('file-input').click()">
+          <div class="upload-icon">📂</div>
+          <div class="upload-text">คลิกเพื่อเลือกไฟล์ Operations_Data.xlsx</div>
+        </div>
+        <input type="file" id="file-input" accept=".xlsx,.xls" onchange="onFileSelect(event)">
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" style="display:none">
+      <div class="filter-bar">
+        <div class="filter-label">🔍 กรองข้อมูล</div>
+        <div class="filter-row">
+          <div class="filter-group"><label>ปี (Year)</label>
+            <select id="f-year" onchange="applyFilter()"><option value="">ทุกปี</option></select></div>
+          <div class="filter-group"><label>รอบ (Half)</label>
+            <select id="f-half" onchange="applyFilter()">
+              <option value="">ทั้ง 2 รอบ</option>
+              <option value="1st">1st</option>
+              <option value="2nd">2nd</option>
+            </select></div>
+          <div class="filter-group"><label>ยูนิต</label>
+            <select id="f-unit" onchange="applyFilter()">
+              <option value="">Unit 1 & 2</option>
+              <option value="1">Unit 1</option>
+              <option value="2">Unit 2</option>
+            </select></div>
+          <button class="btn-reset" onclick="resetFilter()">รีเซ็ต</button>
+        </div>
+      </div>
+
+      <div class="kpi-grid kpi-grid-6">
+        <div class="kpi-card"><div class="kpi-label">ผลล่าสุด Unit 1</div><div class="kpi-value kpi-u1" id="kpi-u1">—</div><div class="kpi-sub" id="kpi-u1-sub">kW</div></div>
+        <div class="kpi-card"><div class="kpi-label">ผลล่าสุด Unit 2</div><div class="kpi-value kpi-u2" id="kpi-u2">—</div><div class="kpi-sub" id="kpi-u2-sub">kW</div></div>
+        <div class="kpi-card"><div class="kpi-label">Over DCC — Unit 1</div><div class="kpi-value kpi-pass" id="kpi-over1">—</div><div class="kpi-sub" id="kpi-over1-sub">kW เหนือ DCC Limit</div></div>
+        <div class="kpi-card"><div class="kpi-label">Over DCC — Unit 2</div><div class="kpi-value kpi-pass" id="kpi-over2">—</div><div class="kpi-sub" id="kpi-over2-sub">kW เหนือ DCC Limit</div></div>
+        <div class="kpi-card"><div class="kpi-label">DCC Limit (สัญญา)</div><div class="kpi-value kpi-dcc">673,250</div><div class="kpi-sub">kW</div></div>
+        <div class="kpi-card"><div class="kpi-label">ผ่าน DCC</div><div class="kpi-value kpi-pass" id="kpi-pass">—</div><div class="kpi-sub" id="kpi-pass-sub">ครั้ง</div></div>
+      </div>
+
+      <div class="section-label">เปรียบเทียบ 1ST VS 2ND</div>
+      <div id="cmp-u1-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">
+        <div class="kpi-card" style="border-top:3px solid var(--u1)"><div class="kpi-label">Net Cap U1 — 1st</div><div class="kpi-value kpi-u1" id="kpi-u1-1st">—</div><div class="kpi-sub" id="kpi-u1-1st-sub">kW</div></div>
+        <div class="kpi-card" style="border-top:3px solid var(--u1)"><div class="kpi-label">Net Cap U1 — 2nd</div><div class="kpi-value kpi-u1" id="kpi-u1-2nd">—</div><div class="kpi-sub" id="kpi-u1-2nd-sub">kW</div></div>
+        <div class="kpi-card" style="border-top:3px solid var(--u1)"><div class="kpi-label">Over DCC U1 — 1st</div><div class="kpi-value kpi-pass" id="kpi-over1-1st">—</div><div class="kpi-sub" id="kpi-over1-1st-sub">kW</div></div>
+        <div class="kpi-card" style="border-top:3px solid var(--u1)"><div class="kpi-label">Over DCC U1 — 2nd</div><div class="kpi-value kpi-pass" id="kpi-over1-2nd">—</div><div class="kpi-sub" id="kpi-over1-2nd-sub">kW</div></div>
+      </div>
+      <div id="cmp-u2-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+        <div class="kpi-card" style="border-top:3px solid var(--u2)"><div class="kpi-label">Net Cap U2 — 1st</div><div class="kpi-value kpi-u2" id="kpi-u2-1st">—</div><div class="kpi-sub" id="kpi-u2-1st-sub">kW</div></div>
+        <div class="kpi-card" style="border-top:3px solid var(--u2)"><div class="kpi-label">Net Cap U2 — 2nd</div><div class="kpi-value kpi-u2" id="kpi-u2-2nd">—</div><div class="kpi-sub" id="kpi-u2-2nd-sub">kW</div></div>
+        <div class="kpi-card" style="border-top:3px solid var(--u2)"><div class="kpi-label">Over DCC U2 — 1st</div><div class="kpi-value kpi-pass" id="kpi-over2-1st">—</div><div class="kpi-sub" id="kpi-over2-1st-sub">kW</div></div>
+        <div class="kpi-card" style="border-top:3px solid var(--u2)"><div class="kpi-label">Over DCC U2 — 2nd</div><div class="kpi-value kpi-pass" id="kpi-over2-2nd">—</div><div class="kpi-sub" id="kpi-over2-2nd-sub">kW</div></div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="chart-card full">
+          <div class="chart-header">
+            <div><div class="chart-title">kW Test Net Output Trend</div></div>
+            <div class="chart-legend">
+              <div class="legend-item"><div class="legend-dot" style="background:var(--u1)"></div>Unit 1</div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--u2)"></div>Unit 2</div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--dcc)"></div>DCC Limit</div>
+            </div>
+          </div>
+          <div class="chart-wrap-tall"><canvas id="chart-trend"></canvas></div>
+        </div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-header"><div><div class="chart-title">kW Over DCC Limit</div><div class="chart-subtitle">ส่วนเกินเหนือ 673,250 kW</div></div></div>
+          <div class="chart-wrap"><canvas id="chart-over"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header"><div><div class="chart-title">Sea Water Temp (CWT)</div><div class="chart-subtitle">อุณหภูมิน้ำทะเล °C</div></div></div>
+          <div class="chart-wrap"><canvas id="chart-cwt"></canvas></div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header-bar">
+          <div><div class="chart-title">ตารางข้อมูลทั้งหมด</div><div class="chart-subtitle" id="table-count">—</div></div>
+        </div>
+        <div class="table-wrap">
+          <table><thead><tr>
+            <th>Year</th><th>Half</th>
+            <th>วันที่ U1</th><th>Net Cap U1 (kW)</th><th>Over DCC U1</th><th>CWT U1 (°C)</th><th>Pass U1</th>
+            <th>วันที่ U2</th><th>Net Cap U2 (kW)</th><th>Over DCC U2</th><th>CWT U2 (°C)</th><th>Pass U2</th>
+          </tr></thead>
+          <tbody id="table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ===== CONFIG =====
+// OneDrive Share Link (People in BLCP only)
+const ONEDRIVE_SHARE_URL = 'https://blcppower-my.sharepoint.com/:x:/g/personal/sompong_t_blcp_co_th/IQDknRu6rDGxRJ8LbHB8D4FlARmqvjJEM9Gj2l9mWzhZOHE';
+
+// แปลง Share Link → Direct Download Link
+function getDownloadUrl(shareUrl) {
+  // SharePoint download link format
+  const base = shareUrl.split('?')[0];
+  return base + '?download=1';
+}
+
+const DCC_LIMIT = 673250;
+let allData = [];
+let charts = {};
+
+// ===== INIT =====
+window.onload = function() {
+  loadFromOneDrive();
+};
+
+// ===== LOAD FROM ONEDRIVE =====
+function loadFromOneDrive() {
+  showLoading();
+  const downloadUrl = getDownloadUrl(ONEDRIVE_SHARE_URL);
+
+  fetch(downloadUrl, { credentials: 'include', mode: 'cors' })
+    .then(r => {
+      if (r.status === 401 || r.status === 403) throw new Error('LOGIN_REQUIRED');
+      if (!r.ok) throw new Error('HTTP_' + r.status);
+      return r.arrayBuffer();
+    })
+    .then(buf => {
+      const wb = XLSX.read(new Uint8Array(buf), { type: 'array', cellDates: true });
+      const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('dcc')) || wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      parseAndRender(rows);
+    })
+    .catch(err => {
+      if (err.message === 'LOGIN_REQUIRED' || err.message.includes('401') || err.message.includes('403')) {
+        showLoginRequired();
+      } else {
+        // CORS หรือ network error → แสดง fallback
+        showError('ไม่สามารถโหลดจาก OneDrive ได้อัตโนมัติ<br>กรุณาตรวจสอบว่า Login Microsoft 365 อยู่ในเบราว์เซอร์นี้ แล้วกด "โหลดใหม่"<br><br>หรืออัปโหลดไฟล์ Excel โดยตรงด้านล่าง');
+      }
+    });
+}
+
+// ===== FILE UPLOAD FALLBACK =====
+function onFileSelect(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  showLoading();
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellDates: true });
+      const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('dcc')) || wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      parseAndRender(rows);
+    } catch(err) {
+      showError('อ่านไฟล์ไม่ได้: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ===== PARSE EXCEL =====
+function parseAndRender(rows) {
+  if (!rows || rows.length < 2) { showError('ไม่พบข้อมูลในไฟล์'); return; }
+  const headers = rows[0].map(v => String(v||'').toLowerCase());
+  const find = (kws) => { for(const k of kws){ const i=headers.findIndex(h=>h.includes(k)); if(i>=0) return i; } return -1; };
+  const idx = {
+    year:   find(['year','ปี']) >= 0 ? find(['year','ปี']) : 0,
+    half:   find(['half','รอบ']) >= 0 ? find(['half','รอบ']) : 1,
+    dateU1: find(['date_u1','test_date_u1','date u1']) >= 0 ? find(['date_u1','test_date_u1','date u1']) : 2,
+    netU1:  find(['net_cap_u1','net cap_u1','test net_cap']) >= 0 ? find(['net_cap_u1','net cap_u1','test net_cap']) : 3,
+    cwtU1:  find(['cwt_u1','seawater temp. cwt_u1','cwt']) >= 0 ? find(['cwt_u1','seawater temp. cwt_u1','cwt']) : 6,
+    dateU2: find(['date_u2','test_date_u2','date u2']) >= 0 ? find(['date_u2','test_date_u2','date u2']) : 8,
+    netU2:  find(['net_cap_u2','net cap_u2']) >= 0 ? find(['net_cap_u2','net cap_u2']) : 9,
+    cwtU2:  find(['cwt_u2','seawater temp. cwt_u2']) >= 0 ? find(['cwt_u2','seawater temp. cwt_u2']) : 12,
+    passU1: find(['pass_u1']) >= 0 ? find(['pass_u1']) : 14,
+    passU2: find(['pass_u2']) >= 0 ? find(['pass_u2']) : 15,
+  };
+  const fmtDate = v => { if(!v) return ''; if(v instanceof Date) return v.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'}); return String(v); };
+  allData = rows.slice(1).filter(r => r[idx.year] !== '' && r[idx.year] !== undefined).map(r => [
+    r[idx.year], r[idx.half], fmtDate(r[idx.dateU1]),
+    Number(r[idx.netU1])||0, 0, 0,
+    Number(r[idx.cwtU1])||0, 0,
+    fmtDate(r[idx.dateU2]), Number(r[idx.netU2])||0, 0, 0,
+    Number(r[idx.cwtU2])||0, 0,
+    r[idx.passU1]||'', r[idx.passU2]||''
+  ]);
+  if (!allData.length) { showError('ไม่พบข้อมูลใน Sheet'); return; }
+
+  // Init Year filter
+  const sel = document.getElementById('f-year');
+  sel.innerHTML = '<option value="">ทุกปี</option>';
+  [...new Set(allData.map(r=>r[0]))].sort().forEach(y => {
+    const o = document.createElement('option'); o.value=y; o.textContent=y; sel.appendChild(o);
+  });
+
+  showDashboard();
+  document.getElementById('nav-count').textContent = allData.length + ' รายการ';
+  document.getElementById('topnav-title').textContent = 'DCC Data · อัปเดตแล้ว ' + new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+  applyFilter();
+}
+
+// ===== SCREENS =====
+function showLoading() {
+  document.getElementById('loading-screen').style.display = 'flex';
+  document.getElementById('error-screen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('nav-count').textContent = 'กำลังโหลด...';
+}
+function showLoginRequired() {
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('error-screen').style.display = 'block';
+  document.getElementById('login-alert').style.display = 'block';
+  document.getElementById('error-alert').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('nav-count').textContent = 'ต้อง Login';
+}
+function showError(msg) {
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('error-screen').style.display = 'block';
+  document.getElementById('login-alert').style.display = 'none';
+  document.getElementById('error-alert').style.display = 'block';
+  document.getElementById('error-alert').querySelector('.alert-sub').innerHTML = msg;
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('nav-count').textContent = 'โหลดไม่สำเร็จ';
+}
+function showDashboard() {
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('error-screen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+}
+
+// ===== FILTER =====
+function applyFilter() {
+  const year=document.getElementById('f-year').value;
+  const half=document.getElementById('f-half').value;
+  const filtered=allData.filter(r=>{
+    if(year&&String(r[0])!==String(year)) return false;
+    if(half&&r[1]!==half) return false;
+    return true;
+  });
+  updateKPI(filtered); updateCharts(filtered); updateTable(filtered);
+  document.getElementById('nav-count').textContent=filtered.length+' รายการ';
+}
+function resetFilter(){document.getElementById('f-year').value='';document.getElementById('f-half').value='';document.getElementById('f-unit').value='';applyFilter();}
+
+// ===== KPI =====
+function updateKPI(data) {
+  const lastU1=[...allData].filter(r=>r[3]>0).pop(), lastU2=[...allData].filter(r=>r[9]>0).pop();
+  if(lastU1){const ov=lastU1[3]-DCC_LIMIT;document.getElementById('kpi-u1').textContent=lastU1[3].toLocaleString();document.getElementById('kpi-u1-sub').textContent=(ov>=0?'+':'')+ov.toLocaleString()+' kW vs DCC';document.getElementById('kpi-over1').textContent=(ov>=0?'+':'')+ov.toLocaleString();document.getElementById('kpi-over1-sub').textContent=lastU1[0]+' / '+lastU1[1];}
+  if(lastU2){const ov=lastU2[9]-DCC_LIMIT;document.getElementById('kpi-u2').textContent=lastU2[9].toLocaleString();document.getElementById('kpi-u2-sub').textContent=(ov>=0?'+':'')+ov.toLocaleString()+' kW vs DCC';document.getElementById('kpi-over2').textContent=(ov>=0?'+':'')+ov.toLocaleString();document.getElementById('kpi-over2-sub').textContent=lastU2[0]+' / '+lastU2[1];}
+  const p1=allData.filter(r=>r[14]==='Pass').length,p2=allData.filter(r=>r[15]==='Pass').length;
+  const tot=p1+p2,tests=allData.filter(r=>r[3]>0).length+allData.filter(r=>r[9]>0).length;
+  document.getElementById('kpi-pass').textContent=tot+'/'+tests;
+  document.getElementById('kpi-pass-sub').textContent=Math.round(tot/tests*100)+'% ผ่าน DCC Limit';
+  const unit=document.getElementById('f-unit').value;
+  document.getElementById('cmp-u1-row').style.display=unit==='2'?'none':'grid';
+  document.getElementById('cmp-u2-row').style.display=unit==='1'?'none':'grid';
+  const year=document.getElementById('f-year').value;
+  let cmpYear=year||null;
+  if(!cmpYear){const ys=[...new Set(allData.map(r=>r[0]))].sort().reverse();for(const y of ys){if(allData.some(r=>r[0]==y&&r[1]==='1st')&&allData.some(r=>r[0]==y&&r[1]==='2nd')){cmpYear=y;break;}}}
+  if(cmpYear){
+    const r1=allData.find(r=>r[0]==cmpYear&&r[1]==='1st'),r2=allData.find(r=>r[0]==cmpYear&&r[1]==='2nd');
+    const fmt=v=>v>0?Number(v).toLocaleString():'—',fmtO=v=>v>0?'+'+(v-DCC_LIMIT).toLocaleString():'—';
+    if(r1){document.getElementById('kpi-u1-1st').textContent=fmt(r1[3]);document.getElementById('kpi-u1-1st-sub').textContent=cmpYear+' / 1st';document.getElementById('kpi-over1-1st').textContent=fmtO(r1[3]);document.getElementById('kpi-over1-1st-sub').textContent='vs DCC 673,250 kW';document.getElementById('kpi-u2-1st').textContent=fmt(r1[9]);document.getElementById('kpi-u2-1st-sub').textContent=cmpYear+' / 1st';document.getElementById('kpi-over2-1st').textContent=fmtO(r1[9]);document.getElementById('kpi-over2-1st-sub').textContent='vs DCC 673,250 kW';}
+    if(r2){document.getElementById('kpi-u1-2nd').textContent=fmt(r2[3]);document.getElementById('kpi-u1-2nd-sub').textContent=cmpYear+' / 2nd';document.getElementById('kpi-over1-2nd').textContent=fmtO(r2[3]);document.getElementById('kpi-over1-2nd-sub').textContent='vs DCC 673,250 kW';document.getElementById('kpi-u2-2nd').textContent=fmt(r2[9]);document.getElementById('kpi-u2-2nd-sub').textContent=cmpYear+' / 2nd';document.getElementById('kpi-over2-2nd').textContent=fmtO(r2[9]);document.getElementById('kpi-over2-2nd-sub').textContent='vs DCC 673,250 kW';}
+  }
+}
+
+// ===== CHARTS =====
+function updateCharts(data){
+  const unit=document.getElementById('f-unit').value,labels=data.map(r=>r[0]+'/'+r[1]);
+  Object.values(charts).forEach(c=>c.destroy());charts={};
+  const u1c='#0095f6',u2c='#833ab4',dc='#e74c3c';
+  const td=[];
+  if(unit!=='2') td.push({label:'Unit 1',data:data.map(r=>r[3]>0?r[3]:null),borderColor:u1c,backgroundColor:u1c+'15',borderWidth:2,pointRadius:4,fill:false,tension:0.3,spanGaps:false});
+  if(unit!=='1') td.push({label:'Unit 2',data:data.map(r=>r[9]>0?r[9]:null),borderColor:u2c,backgroundColor:u2c+'15',borderWidth:2,pointRadius:4,fill:false,tension:0.3,spanGaps:false,borderDash:[5,3]});
+  td.push({label:'DCC Limit',data:data.map(()=>DCC_LIMIT),borderColor:dc,borderWidth:1.5,borderDash:[4,4],pointRadius:0,fill:false});
+  charts.trend=new Chart(document.getElementById('chart-trend'),{type:'line',data:{labels,datasets:td},options:cOpt('kW',false,660000,700000,false)});
+  const od=[];
+  if(unit!=='2') od.push({label:'Unit 1',data:data.map(r=>r[3]>0?r[3]-DCC_LIMIT:null),backgroundColor:u1c+'cc',borderRadius:4});
+  if(unit!=='1') od.push({label:'Unit 2',data:data.map(r=>r[9]>0?r[9]-DCC_LIMIT:null),backgroundColor:u2c+'cc',borderRadius:4});
+  charts.over=new Chart(document.getElementById('chart-over'),{type:'bar',data:{labels,datasets:od},options:cOpt('kW',true)});
+  const cd=[];
+  if(unit!=='2') cd.push({label:'Unit 1',data:data.map(r=>r[6]>0?r[6]:null),borderColor:u1c,borderWidth:2,pointRadius:3,fill:false,tension:0.3,spanGaps:false});
+  if(unit!=='1') cd.push({label:'Unit 2',data:data.map(r=>r[12]>0?r[12]:null),borderColor:u2c,borderWidth:2,pointRadius:3,fill:false,tension:0.3,spanGaps:false,borderDash:[5,3]});
+  charts.cwt=new Chart(document.getElementById('chart-cwt'),{type:'line',data:{labels,datasets:cd},options:cOpt('°C',false,26,33,true)});
+}
+function cOpt(unit,isBar,sugMin,sugMax,hardScale){return{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,position:'bottom',labels:{font:{family:'Kanit',size:11},color:'#8e8e8e',boxWidth:10,padding:12}},tooltip:{backgroundColor:'rgba(255,255,255,0.95)',borderColor:'#dbdbdb',borderWidth:1,titleColor:'#262626',bodyColor:'#262626',bodyFont:{family:'Kanit',size:11},padding:10,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!==null?ctx.parsed.y.toLocaleString():'-'} ${unit}`}}},scales:{x:{ticks:{font:{family:'Kanit',size:10},color:'#8e8e8e',maxRotation:45,autoSkip:true,maxTicksLimit:18},grid:{color:'#f0f0f0'}},y:{...(hardScale?{min:sugMin,max:sugMax}:(sugMin!==undefined?{suggestedMin:sugMin,suggestedMax:sugMax}:{})),ticks:{font:{family:'Kanit',size:10},color:'#8e8e8e',callback:v=>v.toLocaleString()},grid:{color:'#f0f0f0'}}}};}
+
+// ===== TABLE =====
+function updateTable(data){
+  const unit=document.getElementById('f-unit').value,tbody=document.getElementById('table-body');
+  document.getElementById('table-count').textContent=data.length+' รายการที่แสดง';
+  if(!data.length){tbody.innerHTML='<tr><td colspan="12" style="padding:32px;text-align:center;color:#8e8e8e">ไม่พบข้อมูล</td></tr>';return;}
+  const fN=v=>v>0?Number(v).toLocaleString():'—',fO=v=>v!==null?(v>=0?'+':'')+Number(v).toLocaleString():'—',fC=v=>v>0?Number(v).toFixed(3):'—';
+  const bC=s=>s==='Pass'?'badge-pass':(s==='No Test'?'badge-notest':'badge-fail');
+  tbody.innerHTML=data.map(r=>{
+    const n1=r[3],n2=r[9],o1=n1>0?n1-DCC_LIMIT:null,o2=n2>0?n2-DCC_LIMIT:null;
+    const c1=n1>=DCC_LIMIT?'val-pass':(n1>0?'val-fail':''),c2=n2>=DCC_LIMIT?'val-pass':(n2>0?'val-fail':'');
+    const u1=unit!=='2'?`<td style="color:var(--text-secondary)">${r[2]||'—'}</td><td class="${c1}">${fN(n1)}</td><td class="${o1!==null&&o1>=0?'val-pass':'val-fail'}">${fO(o1)}</td><td>${fC(r[6])}</td><td><span class="badge ${bC(r[14])}">${r[14]||'—'}</span></td>`:'';
+    const u2=unit!=='1'?`<td style="color:var(--text-secondary)">${r[8]||'—'}</td><td class="${c2}">${fN(n2)}</td><td class="${o2!==null&&o2>=0?'val-pass':'val-fail'}">${fO(o2)}</td><td>${fC(r[12])}</td><td><span class="badge ${bC(r[15])}">${r[15]||'—'}</span></td>`:'';
+    return`<tr><td>${r[0]}</td><td>${r[1]}</td>${u1}${u2}</tr>`;
+  }).join('');
+}
+</script>
+</body>
+</html>
